@@ -10,8 +10,33 @@ from .config import bitwig_jar
 def installed_key() -> bytes:
     jar = bitwig_jar()
     with zipfile.ZipFile(jar) as archive:
-        data = archive.read("com/bitwig/base/serial/file/sYG.class")
-    method = _method_code(data, "HEY", "()LFnp;")
+        try:
+            method = _method_code(archive.read("com/bitwig/base/serial/file/sYG.class"), "HEY", "()LFnp;")
+        except (KeyError, ValueError):
+            method = _find_key_method(archive)
+    return _key_from_code(method)
+
+
+def _find_key_method(archive) -> bytes:
+    """Obfuscated names change between Bitwig releases: find the method that fills a 128-byte key."""
+    found = []
+    for name in archive.namelist():
+        if name.startswith("com/bitwig/base/serial/file/") and name.endswith(".class"):
+            try:
+                for code in _method_codes(archive.read(name)):
+                    try:
+                        _key_from_code(code)
+                        found.append(code)
+                    except ValueError:
+                        pass
+            except (ValueError, KeyError, IndexError):
+                pass
+    if len(found) != 1:
+        raise ValueError(f"cannot locate Bitwig encoding definition ({len(found)} candidates)")
+    return found[0]
+
+
+def _key_from_code(method: bytes) -> bytes:
     values = []
     pos, literal = 0, None
     while pos < len(method):
@@ -99,3 +124,48 @@ def decode_stream(data: bytes, key: bytes | None = None) -> bytes:
         rotated = ((b >> shift) | (b << (8 - shift))) & 255
         result[i] = v ^ fixed[i % len(fixed)] ^ rotated
     return bytes(result)
+
+
+def _method_codes(data: bytes):
+    """Yield the Code of every no-argument method in a JVM class file."""
+    pos = 8
+
+    def take(n):
+        nonlocal pos
+        value = data[pos : pos + n]
+        pos += n
+        if len(value) != n:
+            raise ValueError("truncated class file")
+        return value
+
+    def u2():
+        return int.from_bytes(take(2), "big")
+
+    def u4():
+        return int.from_bytes(take(4), "big")
+
+    pool = {}
+    count, i = u2(), 1
+    while i < count:
+        tag = take(1)[0]
+        if tag == 1:
+            pool[i] = take(u2()).decode("utf-8", errors="replace")
+        else:
+            sizes = {3: 4, 4: 4, 5: 8, 6: 8, 7: 2, 8: 2, 9: 4, 10: 4, 11: 4, 12: 4, 15: 3, 16: 2, 17: 4, 18: 4, 19: 2, 20: 2}
+            take(sizes[tag])
+            if tag in (5, 6):
+                i += 1
+        i += 1
+    take(6)
+    take(2 * u2())
+    for section in ("fields", "methods"):
+        for _ in range(u2()):
+            take(2)
+            u2()
+            item_desc = pool[u2()]
+            for _ in range(u2()):
+                attr_name, length = pool[u2()], u4()
+                attr = take(length)
+                if section == "methods" and attr_name == "Code" and item_desc.startswith("()"):
+                    size = int.from_bytes(attr[4:8], "big")
+                    yield attr[8 : 8 + size]

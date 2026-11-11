@@ -953,6 +953,7 @@ class Patch:
             meta.append((key, t, v))
         self.preset.meta = meta
         self._merge_dependencies()
+        fill_device_headers(self.preset.body)
         return self.preset
 
     def _merge_dependencies(self):
@@ -980,6 +981,25 @@ class Patch:
     def filename(self):
         name = self.name.replace("/", "_").replace("\\", "_").replace("\x00", "_") or "Untitled"
         return f"{name}.bwpreset"
+
+
+# Bitwig 6.1.7 reads module and modulator records strictly in order and requires these
+# fields right after the category (0x9c). Library templates from older releases lack them.
+DEVICE_HEADER = [(0x9E, 8, ""), (0x9F, 8, ""), (0xA1, 8, ""), (0xA2, 8, ""), (0xA3, 5, True), (0x3550, 1, 1)]
+
+
+def fill_device_headers(body: Obj) -> None:
+    for obj in walk(body):
+        if obj.cls not in (m.MODULE, m.MODULATOR):
+            continue
+        ids = [f for f, _, _ in obj.fields]
+        if 0x9C not in ids:
+            continue
+        have = {f: (t, v) for f, t, v in obj.fields}
+        rest = [x for x in obj.fields if x[0] not in {f for f, _, _ in DEVICE_HEADER}]
+        at = [f for f, _, _ in rest].index(0x9C) + 1
+        header = [(f, *have.get(f, (t, v))) for f, t, v in DEVICE_HEADER]
+        obj.fields = rest[:at] + header + rest[at:]
 
 
 def unique_types(nodes: list[Node]) -> list[str]:
