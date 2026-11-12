@@ -3,7 +3,7 @@ import pytest
 from bwpreset import model as m
 from bwpreset.build import Patch
 from bwpreset.codec import Obj, Preset, Tagged, parse, serialize, walk
-from bwpreset.schema import BITWIG, load
+from bwpreset.schema import LIBRARY, load
 
 
 def test_maps_and_tagged_backreferences_round_trip():
@@ -23,7 +23,7 @@ def test_maps_and_tagged_backreferences_round_trip():
 
 @pytest.mark.parametrize("name", ["Bite", "Heat", "Tuner", "XY", "CV In"])
 def test_encoded_definitions_normalize_to_readable_files(name):
-    path = BITWIG / "Resources/Library/modules" / f"{name}.bwmodule"
+    path = LIBRARY / "modules" / f"{name}.bwmodule"
     definition = parse(path.read_bytes())
     normalized = serialize(definition)
     assert normalized[8:12] == b"0002"
@@ -34,7 +34,7 @@ def test_encoded_definitions_normalize_to_readable_files(name):
 def test_all_shipped_modules_are_available_to_builder(tmp_path):
     schema = load()[0]
     ids = {entry["id"] for entry in schema["modules"].values()}
-    for path in (BITWIG / "Resources/Library/modules").glob("*.bwmodule"):
+    for path in (LIBRARY / "modules").glob("*.bwmodule"):
         assert str(m.get(parse(path.read_bytes()).body, 0x18E1)) in ids
     for kind in schema["modules"]:
         patch = Patch("Poly Grid", "one module")
@@ -46,7 +46,7 @@ def test_all_shipped_modules_are_available_to_builder(tmp_path):
 def test_definition_can_supply_a_module_without_a_preset_example():
     from bwpreset.definitions import module_definition
 
-    definition = parse((BITWIG / "Resources/Library/modules/Bite.bwmodule").read_bytes())
+    definition = parse((LIBRARY / "modules/Bite.bwmodule").read_bytes())
     module, descriptors, outputs = module_definition(definition)
     assert m.get(module, m.F_TITLE) == "Bite"
     parameters = {m.get(p, m.F_NAME): p for p in m.params(module)}

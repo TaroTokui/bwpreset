@@ -28,10 +28,21 @@ def library_root(root=None):
     if explicit:
         return Path(explicit).expanduser()
     root = installation() if root is None else Path(root)
-    for path in (root / "Resources/Library", root / "resources/Library", root / "resources/library"):
+    # Windows has the library at the top of the install folder, not under resources.
+    for path in (root / "Resources/Library", root / "resources/Library", root / "resources/library", root / "Library"):
         if path.is_dir():
             return path
     return root / "Resources/Library"
+
+
+def localization_root(root=None):
+    """The folder of *-resources.properties: beside the library, except on Windows (resources/localization)."""
+    root = installation() if root is None else Path(root)
+    beside_library = library_root(root).parent / "localization"
+    for path in (beside_library, root / "resources/localization"):
+        if path.is_dir():
+            return path
+    return beside_library
 
 
 def bitwig_jar():

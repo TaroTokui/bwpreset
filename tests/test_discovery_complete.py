@@ -2,7 +2,7 @@ import uuid
 
 from bwpreset import model as m
 from bwpreset.codec import Obj, Preset
-from bwpreset.config import installation, library_root
+from bwpreset.config import installation, library_root, localization_root
 from bwpreset.definitions import module_definition
 from bwpreset.schema import Learner, finalize
 
@@ -54,3 +54,23 @@ def test_installation_override_supports_app_bundle_and_library_override(monkeypa
     assert installation() == app / "Contents"
     monkeypatch.setenv("BITWIG_LIBRARY_ROOT", str(tmp_path / "library"))
     assert library_root() == tmp_path / "library"
+
+
+def test_windows_layout_has_the_library_at_the_top_and_localization_under_resources(monkeypatch, tmp_path):
+    root = tmp_path / "Bitwig Studio"
+    (root / "Library" / "modules").mkdir(parents=True)
+    (root / "resources" / "localization").mkdir(parents=True)
+    monkeypatch.setenv("BITWIG_HOME", str(root))
+    monkeypatch.delenv("BITWIG_LIBRARY_ROOT", raising=False)
+    assert library_root() == root / "Library"
+    assert localization_root() == root / "resources" / "localization"
+
+
+def test_macos_layout_keeps_localization_next_to_the_library(monkeypatch, tmp_path):
+    contents = tmp_path / "Bitwig.app" / "Contents"
+    (contents / "Resources" / "Library").mkdir(parents=True)
+    (contents / "Resources" / "localization").mkdir(parents=True)
+    monkeypatch.setenv("BITWIG_HOME", str(tmp_path / "Bitwig.app"))
+    monkeypatch.delenv("BITWIG_LIBRARY_ROOT", raising=False)
+    assert library_root() == contents / "Resources" / "Library"
+    assert localization_root() == contents / "Resources" / "localization"

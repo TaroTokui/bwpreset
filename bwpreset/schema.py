@@ -15,10 +15,11 @@ from pathlib import Path
 
 from . import model as m
 from .codec import Obj, parse, walk
-from .config import installation, library_root
+from .config import installation, library_root, localization_root
 
 CORPUS_DIRS = [
     Path.home() / "Library/Application Support/Bitwig/Bitwig Studio/installed-packages",
+    Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local") / "Bitwig Studio/installed-packages",  # Windows
     Path.home() / "Documents/Bitwig Studio/Library",
     Path.home() / "Documents/Bitwig Studio/Projects",
     library_root(),
@@ -29,7 +30,7 @@ CACHE_DIR = Path(os.environ.get("BWGRID_CACHE_HOME", str(Path.home() / ".cache/b
 CACHE = CACHE_DIR / "schema.pkl"
 BITWIG = installation()
 LIBRARY = library_root(BITWIG)
-LOCALIZATION = LIBRARY.parent / "localization"
+LOCALIZATION = localization_root(BITWIG)
 GRID_DEVICES = {"Poly Grid", "FX Grid", "Note Grid"}
 MODULE_PATH = re.compile(r"^CONTENTS/MODULES/(\d+)/CONTENTS/(\w+)$")
 MODULATOR_PATH = re.compile(r"^MODULATORS/(\d+)/CONTENTS/(\w+)$")
@@ -341,7 +342,8 @@ def load() -> tuple[dict, dict[uuid.UUID, Obj], dict[str, object]]:
     data = (finalize(learner), templates, {k: v[1] for k, v in learner.devices.items()})
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     CACHE.write_bytes(pickle.dumps((fp, data)))
-    (CACHE_DIR / "schema.json").write_text(json.dumps(data[0], indent=1, ensure_ascii=False, default=str))
+    # Not the locale's encoding: on Windows that is a code page that lacks some of these characters.
+    (CACHE_DIR / "schema.json").write_text(json.dumps(data[0], indent=1, ensure_ascii=False, default=str), encoding="utf-8")
     return data
 
 
