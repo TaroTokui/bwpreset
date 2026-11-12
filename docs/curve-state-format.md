@@ -71,6 +71,7 @@ Modules support enabled/active, color and width/height. Modulators support enabl
 | Module/modulator | `0x2643` | named accent color | `aEA`: `accent_color`; `sci` / `V1p` display-color enum |
 | Module | `0x2651`, `0x2652` | grid width/height, integers 1–99 | `Qll`: `grid_width`, `grid_height`; registrations declare default 1 and bounds 1–99 |
 | Modulator | `0x1a19` | per-voice boolean | `VRn`: `is_polyphonic_mode`; `ntr` inspector exposes `per_voice` |
+| Modulator | `0x1aaf` | conversion bookkeeping boolean, default false; not exposed. Readable decompilation accepts the default; true keeps the lossless import | `VRn`: `was_extracted_during_document_conversion`; stored as false on all 2,957 modulators of 509 installed-pack presets saved by Bitwig 5.0–6.1 |
 | POLY `0x0d94` | `0x28ff` | voices, 1–64 | `PyL`: `user_requested_voices`, declared bounds |
 | POLY | `0x2900` | voice-stack count, 1–16 | `PyL`: `voice_stacking`, declared bounds |
 | POLY | `0x2901` | alternate mono voices: false = True Mono, true = Digi Mono | `PyL`: `alternate_mono_voices`; runtime `pmZ` mono enum `CiR` / `SYd`; installed `float_common_atoms-resources.properties` labels/descriptions |

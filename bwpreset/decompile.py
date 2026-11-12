@@ -174,7 +174,12 @@ class Decompiler:
             0xA2,
             0x3550,
         }
-        if any(f not in known for f, _, _ in obj.fields):
+
+        # A default (false) conversion flag carries no state: the builder omits it and Bitwig reads it back as false.
+        def default_flag(f, v):
+            return f == m.F_EXTRACTED_DURING_CONVERSION and v is False
+
+        if any(f not in known and not default_flag(f, v) for f, _, v in obj.fields):
             self.requires_lossless = True
             self.unsupported.append(f"{section[:-1]} instance fields; retained by lossless import")
         type_id = str(m.get(obj, m.F_TYPE))

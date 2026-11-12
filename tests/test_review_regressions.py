@@ -1,3 +1,6 @@
+import copy
+import uuid
+
 import pytest
 
 from bwpreset import model as m
@@ -122,3 +125,40 @@ def test_documented_lossless_cli_flag(catalog, tmp_path, capsys):
     ns = {}
     exec(code, ns)
     assert len(ns["p"].modules) == 1
+
+
+def _with_test_modulator(catalog):
+    template = copy.deepcopy(catalog[1][next(k for k in catalog[1] if isinstance(k, uuid.UUID))])
+    template.cls = m.MODULATOR
+    type_id = uuid.uuid4()
+    m.put_field(template, m.F_TYPE, 0x15, type_id)
+    entry = dict(catalog[0]["modules"]["Test"], id=str(type_id))
+    catalog[0]["modulators"]["TestMod"] = entry
+    catalog[1][type_id] = template
+
+
+def _modulator_with_conversion_flag(catalog, value):
+    from bwpreset.decompile import decompile
+
+    _with_test_modulator(catalog)
+    p = Patch("Test Grid", "conversion flag")
+    p.add("Test", 0, 0)
+    p.modulator("TestMod")
+    preset = p.to_preset()
+    device = m.get(preset.body, m.F_DEVICE)
+    modulator = m.get(m.get(device, m.F_MODULATORS), m.F_LIST)[0]
+    modulator.fields.append((m.F_EXTRACTED_DURING_CONVERSION, 5, value))
+    return decompile(preset)
+
+
+def test_readable_decompile_accepts_default_conversion_flag_on_modulators(catalog):
+    code, issues = _modulator_with_conversion_flag(catalog, False)
+    assert "b85decode" not in code
+    assert not any("instance fields" in issue for issue in issues)
+    assert "p.modulator('TestMod'" in code
+
+
+def test_readable_decompile_keeps_set_conversion_flag_lossless(catalog):
+    code, issues = _modulator_with_conversion_flag(catalog, True)
+    assert "b85decode" in code
+    assert any("instance fields" in issue for issue in issues)

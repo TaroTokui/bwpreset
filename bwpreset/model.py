@@ -66,6 +66,9 @@ F_SOURCE = 0x1C4A
 F_X = 0x1A1A
 F_Y = 0x1A1B
 F_COLOR = 0x2643
+# Modulator `was_extracted_during_document_conversion` (registered by `VRn`, default false).
+# Every modulator in Bitwig 5.0-6.1 presets stores it, always false in the installed packs.
+F_EXTRACTED_DURING_CONVERSION = 0x1AAF
 F_MODULATORS = 0x18F5
 F_REMOTE_CONTROLS = 0x1A85
 F_REMOTE_PAGES = 0x1A7E
