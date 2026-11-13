@@ -385,3 +385,44 @@ def test_large_file_size_foreign_path_edit_and_audio_length_validation(tmp_path)
     decoded.source.frames = 40
     with pytest.raises(ValueError, match="sample boundaries"):
         apply_asset(p, decoded)
+
+
+def _as_pre_6(parameter):
+    """Move every file reference back onto its single-sample resource, as Bitwig 5 saved it."""
+    from bwpreset.codec import walk
+
+    old = copy.deepcopy(parameter)
+    for obj in walk(old):
+        if obj.cls == 0x210 and isinstance(m.get(obj, 0x4112), Obj):
+            obj.fields = [(0x748, 9, m.get(v, 0x748)) if f == 0x4112 else (f, t, v) for f, t, v in obj.fields]
+    return roundtrip(old)
+
+
+def _old_sample_references(parameter):
+    from bwpreset.codec import walk
+
+    return [o for o in walk(parameter) if o.cls == 0x210 and any(f == 0x748 for f, _, _ in o.fields)]
+
+
+def test_decoded_pre_6_samples_use_the_analyzable_reference(tmp_path):
+    # Bitwig 6 nests the file reference (0x748) in analyzable_sample_reference (0x4112 -> 0x15EB) and converts
+    # Bitwig 5 files on load. Rebuilt presets carry the current version, so decoding converts them the same way.
+    path = tmp_path / "tone.wav"
+    path.write_bytes(wav_bytes())
+    single = apply_asset(Obj(0x212, [(0x2B9, 8, "SAMPLE")]), Sample(AudioFile.from_file(path), root_key=48))
+    archive = tmp_path / "tone.multisample"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("tone.wav", wav_bytes())
+        z.writestr("multisample.xml", '<multisample><sample file="tone.wav"><key root="50"/></sample></multisample>')
+    multi = apply_asset(Obj(0x212, [(0x2B9, 8, "SAMPLE")]), Multisample.from_file(archive))
+    for parameter in (single, multi):
+        old = _as_pre_6(parameter)
+        assert _old_sample_references(old)
+        decoded = decode_asset(old)
+        for result in (apply_asset(old, decoded), Asset.from_bytes(decoded.to_bytes()).parameter_object()):
+            assert not _old_sample_references(result)
+            assert len(collect_dependencies(result)) == 1
+    resource = m.get(apply_asset(_as_pre_6(single), decode_asset(_as_pre_6(single))), 0x74C)
+    assert [f for f, _, _ in resource.fields][:2] == [0x2B9, 0x4112]
+    assert m.get(m.get(m.get(resource, 0x4112), 0x748), 0x129E).cls == 0x4A6
+    assert decode_asset(_as_pre_6(single)).root_key == 48

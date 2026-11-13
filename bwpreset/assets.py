@@ -1165,8 +1165,22 @@ def apply_asset(parameter: Obj, value) -> Obj:
     return result
 
 
+def _nest_sample_references(parameter):
+    """Move pre-6 file references under analyzable_sample_reference, as Bitwig converts Bitwig 5 files.
+
+    Bitwig 6 keeps a single-sample resource's file reference (0x748) inside 0x4112 -> 0x15EB. Its
+    document conversion for older files moves the field there and changes nothing else. Generated
+    presets carry the current version, so Bitwig does not convert them and rejects the old layout.
+    """
+    for obj in walk(parameter):
+        if obj.cls != 0x210 or m.get(obj, 0x4112) is not None:
+            continue
+        obj.fields = [(0x4112, 9, Obj(0x15EB, [(f, t, v)])) if f == 0x748 else (f, t, v) for f, t, v in obj.fields]
+
+
 def decode_asset(parameter):
     parameter = copy.deepcopy(parameter)
+    _nest_sample_references(parameter)
     if parameter.cls == SAMPLE_PLAYER_PARAM:
         value = SamplePlayer()
         for name, (fid, _, enum) in PLAYER_FIELDS.items():
