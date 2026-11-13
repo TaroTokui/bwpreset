@@ -312,7 +312,12 @@ class Decompiler:
 
         for page in m.get(m.get(self.device, m.F_REMOTE_CONTROLS), m.F_REMOTE_PAGES, []) or []:
             page_name = m.get(page, m.F_PAGE_NAME)
-            out.append(f"p.page({page_name!r})" if page_name else "p.page()")
+            tags = m.get(page, m.F_PAGE_EXTRA) or ""
+            if " ".join(tags.split()) != tags:
+                self.unsupported.append(f"remote page tags {tags!r}")
+            args = [repr(page_name)] if page_name or tags else []
+            args += [f"tags={tags.split()!r}"] if tags else []
+            out.append(f"p.page({', '.join(args)})")
             for rc in m.get(page, m.F_PAGE_CONTROLS):
                 target = self.ref(m.get(rc, m.F_RC_TARGET))
                 if self.is_stale(m.get(rc, m.F_RC_TARGET)):

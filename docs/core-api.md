@@ -30,7 +30,7 @@ lfo.route(filter["CUTOFF"], 0.2, normalized=True)
 p.remote(filter["CUTOFF"], "Cutoff", slot=0)
 ```
 
-Amounts use target stored units. Normalized depth is a fraction of an authoritative numeric range. Named transfer functions are `linear`, `abs_linear`, `inv_abs_linear`, `cubic`, `inv_cubic`, `rectify_pos` and `rectify_neg`. `p.route` uses voice-stack spread. Remote pages have eight slots; `p.page(name)` starts a new page. `slot=8` places the optional ninth knob, which Bitwig shows when a page allows 9 slots; automatic placement uses only slots 0-7.
+Amounts use target stored units. Normalized depth is a fraction of an authoritative numeric range. Named transfer functions are `linear`, `abs_linear`, `inv_abs_linear`, `cubic`, `inv_cubic`, `rectify_pos` and `rectify_neg`. `p.route` uses voice-stack spread. Remote pages have eight slots; `p.page(name)` starts a new page; `p.page(name, tags=["envelope"])` also sets the page's tags, which Bitwig stores as one space-separated string. When automatic placement fills a page, the next page keeps its name and tags. `slot=8` places the optional ninth knob, which Bitwig shows when a page allows 9 slots; automatic placement uses only slots 0-7.
 
 ## Editing and fragments
 

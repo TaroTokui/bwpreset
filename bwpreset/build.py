@@ -453,7 +453,7 @@ class Patch:
         self.device_params = {m.get(p, m.F_NAME): p for p in m.params(self.device)}
         self.modules: list[Module] = []
         self.modulators: list[Modulator] = []
-        self.remote_pages: list[tuple[str, dict[int, tuple[Port, str]]]] = []
+        self.remote_pages: list[tuple[str, dict[int, tuple[Port, str]], tuple[str, ...]]] = []
         self._imported = False
         self._original_remote_pages = []
         self._slot_dependencies = []
@@ -735,7 +735,7 @@ class Patch:
         selection = m.get(self.preset.body, m.F_SELECTION)
         if isinstance(selection, list):
             selection[:] = [o for o in selection if id(o) not in removed_ids]
-        for _, controls in self.remote_pages:
+        for _, controls, _ in self.remote_pages:
             for slot, (port, _) in list(controls.items()):
                 if port.owner is node:
                     del controls[slot]
@@ -881,9 +881,14 @@ class Patch:
         self._dirty = True
         return self
 
-    def page(self, name: str = ""):
-        """Start a new remote control page."""
-        self.remote_pages.append((coerce(name, 0x08, "page name"), {}))
+    def page(self, name: str = "", tags=()):
+        """Start a new remote control page, optionally with tags (single words, e.g. ["envelope"])."""
+        name = coerce(name, 0x08, "page name")
+        if isinstance(tags, str) or not isinstance(tags, (list, tuple)):
+            raise PatchError(f"page tags must be a list of words, not {tags!r}")
+        if any(not isinstance(t, str) or not t or t.split() != [t] for t in tags):
+            raise PatchError(f"page tags {tags!r} must be non-empty words without whitespace")
+        self.remote_pages.append((name, {}, tuple(tags)))
         self._dirty = True
         return self
 
@@ -897,7 +902,8 @@ class Patch:
         if slot is not None and (isinstance(slot, bool) or not isinstance(slot, int) or not 0 <= slot < SLOTS_PER_PAGE):
             raise PatchError(f"remote control slot {slot} is out of range")
         if not self.remote_pages or (slot is None and all(i in self.remote_pages[-1][1] for i in range(KNOBS_PER_PAGE))):
-            self.page(self.remote_pages[-1][0] if self.remote_pages else "")
+            name, _, tags = self.remote_pages[-1] if self.remote_pages else ("", {}, ())
+            self.page(name, tags)
         controls = self.remote_pages[-1][1]
         if slot is None:
             slot = next(i for i in range(KNOBS_PER_PAGE) if i not in controls)
@@ -909,7 +915,7 @@ class Patch:
 
     def _remote_controls(self) -> list[Obj]:
         pages = []
-        for name, controls in self.remote_pages:
+        for name, controls, tags in self.remote_pages:
             items = [
                 Obj(
                     m.REMOTE_CONTROL,
@@ -922,7 +928,9 @@ class Patch:
                 )
                 for slot, (target, label) in sorted(controls.items())
             ]
-            pages.append(Obj(m.REMOTE_PAGE, [(m.F_PAGE_NAME, 0x08, name), (m.F_PAGE_EXTRA, 0x08, ""), (m.F_PAGE_CONTROLS, 0x12, items)]))
+            pages.append(
+                Obj(m.REMOTE_PAGE, [(m.F_PAGE_NAME, 0x08, name), (m.F_PAGE_EXTRA, 0x08, " ".join(tags)), (m.F_PAGE_CONTROLS, 0x12, items)])
+            )
         return pages
 
     def to_preset(self) -> Preset:

@@ -141,7 +141,7 @@ def test_remote_accepts_ninth_slot_only_when_asked(catalog):
     for mod in mods[:8]:
         p.remote(mod["TIME"])
     p.remote(mods[9]["TIME"])
-    assert [sorted(controls) for _, controls in p.remote_pages] == [list(range(9)), [0]]
+    assert [sorted(controls) for _, controls, _ in p.remote_pages] == [list(range(9)), [0]]
     pages = m.get(m.get(m.get(p.to_preset().body, m.F_DEVICE), m.F_REMOTE_CONTROLS), m.F_REMOTE_PAGES)
     assert [m.get(rc, m.F_RC_INDEX) for rc in m.get(pages[0], m.F_PAGE_CONTROLS)] == list(range(9))
     for used_or_invalid in (0, -1):
@@ -164,6 +164,73 @@ def test_readable_decompiler_rebuilds_ninth_slot(catalog):
     assert ns["p"].remote_pages[0][0] == "Envelope"
     assert sorted(ns["p"].remote_pages[0][1]) == [0, 8]
     assert ns["p"].remote_pages[0][1][8][1] == "Out"
+
+
+def _pages(preset):
+    return m.get(m.get(m.get(preset.body, m.F_DEVICE), m.F_REMOTE_CONTROLS), m.F_REMOTE_PAGES)
+
+
+def test_page_tags_are_written_space_separated(catalog):
+    # Bitwig stores a page's tags in one string field (0x1B79), separated by spaces,
+    # e.g. "mutliwave waveform" in Cristian Vogel's Bitwig Lab II presets.
+    p = patch(catalog)
+    a = p.add("Test", 0, 0)
+    p.page("Plain")
+    p.remote(a["TIME"])
+    p.page("Envelope", tags=["envelope"])
+    p.remote(a["RATE"])
+    p.page("Waveform", tags=("mutliwave", "waveform"))
+    p.remote(a["TIME"])
+    assert [m.get(pg, m.F_PAGE_EXTRA) for pg in _pages(p.to_preset())] == ["", "envelope", "mutliwave waveform"]
+
+
+def test_overflow_page_keeps_name_and_tags(catalog):
+    p = patch(catalog)
+    mods = [p.add("Test", i, 0) for i in range(9)]
+    p.page("Envelope", tags=["envelope"])
+    for mod in mods:
+        p.remote(mod["TIME"])
+    pages = _pages(p.to_preset())
+    assert [(m.get(pg, m.F_PAGE_NAME), m.get(pg, m.F_PAGE_EXTRA)) for pg in pages] == [("Envelope", "envelope")] * 2
+
+
+@pytest.mark.parametrize("tags", ["envelope", [""], ["two words"], ["tab	here"], [1], None])
+def test_page_rejects_bad_tags(catalog, tags):
+    p = patch(catalog)
+    with pytest.raises(PatchError):
+        p.page("Envelope", tags=tags)
+    assert p.remote_pages == []
+
+
+def test_readable_decompiler_rebuilds_page_tags(catalog):
+    from bwpreset.decompile import decompile
+
+    p = patch(catalog)
+    a = p.add("Test", 0, 0)
+    p.page("Envelope", tags=["envelope"])
+    p.remote(a["TIME"])
+    p.page("Waveform", tags=["mutliwave", "waveform"])
+    p.remote(a["RATE"])
+    p.page("Plain")
+    p.remote(a["TIME"])
+    code, issues = decompile(p.to_preset())
+    assert "p.page('Envelope', tags=['envelope'])" in code and "p.page('Plain')" in code and not issues
+    ns = {}
+    exec(code, ns)
+    assert [m.get(pg, m.F_PAGE_EXTRA) for pg in _pages(ns["p"].to_preset())] == ["envelope", "mutliwave waveform", ""]
+
+
+def test_decompiler_flags_tags_that_do_not_split_cleanly(catalog):
+    from bwpreset.decompile import decompile
+
+    p = patch(catalog)
+    a = p.add("Test", 0, 0)
+    p.page("Envelope")
+    p.remote(a["TIME"])
+    preset = p.to_preset()
+    m.set_field(_pages(preset)[0], m.F_PAGE_EXTRA, "a  b")
+    _, issues = decompile(preset)
+    assert any("tags" in issue for issue in issues)
 
 
 def test_named_values_units_and_routing(catalog):
