@@ -129,8 +129,41 @@ def test_failed_multi_value_set_and_remote_are_atomic(catalog):
     with pytest.raises(PatchError):
         a.set(TIME=0.7, RATE=float("nan"))
     with pytest.raises(PatchError):
-        p.remote(a["TIME"], slot=8)
+        p.remote(a["TIME"], slot=9)
     assert a.used == {} and p.remote_pages == []
+
+
+def test_remote_accepts_ninth_slot_only_when_asked(catalog):
+    # Bitwig's "Allow 9 Slots" stores the ninth knob as slot_index 8 (the field's maximum).
+    p = patch(catalog)
+    mods = [p.add("Test", i, 0) for i in range(10)]
+    p.remote(mods[8]["TIME"], "Ninth", slot=8)
+    for mod in mods[:8]:
+        p.remote(mod["TIME"])
+    p.remote(mods[9]["TIME"])
+    assert [sorted(controls) for _, controls in p.remote_pages] == [list(range(9)), [0]]
+    pages = m.get(m.get(m.get(p.to_preset().body, m.F_DEVICE), m.F_REMOTE_CONTROLS), m.F_REMOTE_PAGES)
+    assert [m.get(rc, m.F_RC_INDEX) for rc in m.get(pages[0], m.F_PAGE_CONTROLS)] == list(range(9))
+    for used_or_invalid in (0, -1):
+        with pytest.raises(PatchError):
+            p.remote(mods[0]["RATE"], slot=used_or_invalid)
+
+
+def test_readable_decompiler_rebuilds_ninth_slot(catalog):
+    from bwpreset.decompile import decompile
+
+    p = patch(catalog)
+    a, b = p.add("Test", 0, 0), p.add("Test", 1, 0)
+    p.page("Envelope")
+    p.remote(a["TIME"], slot=0)
+    p.remote(b["TIME"], "Out", slot=8)
+    code, issues = decompile(p.to_preset())
+    assert "slot=8" in code and not issues
+    ns = {}
+    exec(code, ns)
+    assert ns["p"].remote_pages[0][0] == "Envelope"
+    assert sorted(ns["p"].remote_pages[0][1]) == [0, 8]
+    assert ns["p"].remote_pages[0][1][8][1] == "Out"
 
 
 def test_named_values_units_and_routing(catalog):

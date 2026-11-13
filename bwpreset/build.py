@@ -34,6 +34,8 @@ USER_PRESETS = Path.home() / "Documents/Bitwig Studio/Library/Presets"
 META_DROP = {"orig_file_checksum", "packaged_file_id", "revision_id", "revision_no"}
 MODULATOR_ROWS = 3
 KNOBS_PER_PAGE = 8
+# A page's "Allow 9 Slots" option adds a ninth knob, saved as slot index 8 (the field's maximum in Bitwig 6.1.3).
+SLOTS_PER_PAGE = KNOBS_PER_PAGE + 1
 STEP_EDITORS = {"Data/Steps", "Data/Gates", "Data/Pitches", "Data/Accents", "Data/Probabilities"}
 
 
@@ -886,17 +888,20 @@ class Patch:
         return self
 
     def remote(self, target: Port, label: str = "", slot: int | None = None):
-        """Assign target to a remote control knob: the given slot (0-7) or the next free one."""
+        """Assign target to a remote control knob: the given slot or the next free one of 0-7.
+
+        Slot 8 is the optional ninth knob; it is only used when given explicitly.
+        """
         self._check_port(target, "target")
         coerce(label, 0x08, "remote label")
-        if slot is not None and (isinstance(slot, bool) or not isinstance(slot, int) or not 0 <= slot < KNOBS_PER_PAGE):
+        if slot is not None and (isinstance(slot, bool) or not isinstance(slot, int) or not 0 <= slot < SLOTS_PER_PAGE):
             raise PatchError(f"remote control slot {slot} is out of range")
-        if not self.remote_pages or (slot is None and len(self.remote_pages[-1][1]) == KNOBS_PER_PAGE):
+        if not self.remote_pages or (slot is None and all(i in self.remote_pages[-1][1] for i in range(KNOBS_PER_PAGE))):
             self.page(self.remote_pages[-1][0] if self.remote_pages else "")
         controls = self.remote_pages[-1][1]
         if slot is None:
             slot = next(i for i in range(KNOBS_PER_PAGE) if i not in controls)
-        if not 0 <= slot < KNOBS_PER_PAGE or slot in controls:
+        if slot in controls:
             raise PatchError(f"remote control slot {slot} is out of range or already used")
         controls[slot] = (target, label)
         self._dirty = True
